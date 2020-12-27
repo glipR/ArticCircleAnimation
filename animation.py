@@ -51,6 +51,8 @@ class SquareDanceAnimator(Scene):
         "fill_opacity": 1,
     })
     ARROW_FINAL_DIR_COLOR = None
+    ARROW_FINAL_LAG_RATIO = 0
+    ARROW_FINAL_RUNTIME = 0.7
 
     ARROW_CREATE_ANIM = None
     ARROW_LAG_RATIO = 0.1
@@ -225,7 +227,7 @@ class SquareDanceAnimator(Scene):
         for id in self.arrow_blocks:
             new_arrow = self._create_arrow(self.arrow_blocks[id].get_center(), self.arrow_blocks[id].direction, final=True)
             anims.append(Transform(self.arrow_blocks[id], new_arrow))
-        self.play(LaggedStart(*anims))
+        self.play(LaggedStart(*anims, lag_ratio=self.ARROW_FINAL_LAG_RATIO), run_time=self.ARROW_FINAL_RUNTIME)
 
     def construct(self):
         self.renderer.camera.background_color = self.background_color
