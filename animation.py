@@ -1,9 +1,9 @@
 import math
 from manim import Tex
 from manim.animation.composition import AnimationGroup, LaggedStart
-from manim.animation.fading import FadeIn, FadeOut
+from manim.animation.fading import FadeIn, FadeInFrom, FadeOut
 from manim.animation.transform import ApplyMethod, Transform
-from manim.constants import DEFAULT_MOBJECT_TO_MOBJECT_BUFFER, DOWN, LEFT, PI, RIGHT, UP
+from manim.constants import DOWN, LEFT, PI
 from manim.mobject.geometry import Arrow, Rectangle, Square
 from manim.scene.moving_camera_scene import MovingCameraScene
 from manim.utils.color import BLACK, BLUE, GREEN, RED, WHITE, YELLOW
@@ -82,6 +82,7 @@ class SquareDanceAnimator(MovingCameraScene):
         ["MOVE"],
         ["CREATE"],
     ]
+    SPEED = lambda self, i: 1
 
     def from_obj(self, obj):
         self.seed_text = self.create_seed_obj(obj)
@@ -92,7 +93,7 @@ class SquareDanceAnimator(MovingCameraScene):
         for iteration_obj in obj["generation_data"]:
             self.increment_animate(iteration_obj)
             if self.ITERATION_WAIT > 0:
-                self.wait(self.ITERATION_WAIT)
+                self.wait(self.ITERATION_WAIT / self.SPEED(iteration_obj["iteration"]))
         if self.TRANSFORM_FINAL:
             self.transform_arrows()
 
@@ -131,19 +132,21 @@ class SquareDanceAnimator(MovingCameraScene):
             if "EXPAND" in animation and expand_anim:
                 max_run_time = max(max_run_time, self.SQUARE_CREATE_RUNTIME)
                 args.append(expand_anim)
-            if "REMOVE" in animation and destroyed_anim:
+            if "REMOVE" in animation and destroyed_overlay:
                 self.add_foreground_mobjects(*destroyed_overlay)
+            if "REMOVE" in animation and destroyed_anim:
                 max_run_time = max(max_run_time, self.DESTRUCTION_RUNTIME)
                 args.append(destroyed_anim)
             if "MOVE" in animation and moved_anim:
                 max_run_time = max(max_run_time, self.MOVEMENT_RUNTIME)
                 args.append(moved_anim)
-            if "CREATE" in animation and created_anim:
+            if "CREATE" in animation and create_overlay:
                 self.add_foreground_mobjects(*create_overlay)
+            if "CREATE" in animation and created_anim:
                 max_run_time = max(max_run_time, self.ARROW_CREATE_RUNTIME)
                 args.append(created_anim)
             if len(args) > 0:
-                self.play(*args, run_time=max_run_time)
+                self.play(*args, run_time=max_run_time / self.SPEED(iteration_obj["iteration"]))
 
     def generate_squares(self, iteration):
         squares = []
@@ -220,19 +223,24 @@ class SquareDanceAnimator(MovingCameraScene):
                 [d2x, d2y],
             )
             overlay_objs.extend([self.arrow_blocks[id1], self.arrow_blocks[id2]])
+            if self.ARROW_OVERLAY_COLOUR is not None:
+                top = max(self.arrow_blocks[id1].get_top()[1], self.arrow_blocks[id2].get_top()[1])
+                right = max(self.arrow_blocks[id1].get_right()[0], self.arrow_blocks[id2].get_right()[0])
+                fade_square = Square(side_length=self.scale * 2, color=self.ARROW_OVERLAY_COLOUR)
+                fade_square.set_opacity(self.ARROW_OVERLAY_STARTING_ALPHA)
+                fade_square.move_to([right - self.scale, top - self.scale, 0])
+                overlay_objs.append(fade_square)
             if self.ARROW_CREATE_RUNTIME > 0:
                 anims = []
                 if self.ARROW_OVERLAY_COLOUR is not None:
-                    top = max(self.arrow_blocks[id1].get_top()[1], self.arrow_blocks[id2].get_top()[1])
-                    right = max(self.arrow_blocks[id1].get_right()[0], self.arrow_blocks[id2].get_right()[0])
-                    fade_square = Square(side_length=self.scale * 2, color=self.ARROW_OVERLAY_COLOUR)
-                    fade_square.set_opacity(self.ARROW_OVERLAY_STARTING_ALPHA)
-                    fade_square.move_to([right - self.scale, top - self.scale, 0])
-                    overlay_objs.append(fade_square)
                     anims.append(FadeOut(fade_square))
                 if self.ARROW_CREATE_ANIM is not None:
-                    anims.append(self.ARROW_CREATE_ANIM(self.arrow_blocks[id1]))
-                    anims.append(self.ARROW_CREATE_ANIM(self.arrow_blocks[id2]))
+                    if self.ARROW_CREATE_ANIM == FadeInFrom:
+                        anims.append(FadeInFrom(self.arrow_blocks[id1], direction=[-d1x * self.scale, -d1y * self.scale, 0]))
+                        anims.append(FadeInFrom(self.arrow_blocks[id2], direction=[-d2x * self.scale, -d2y * self.scale, 0]))
+                    else:
+                        anims.append(self.ARROW_CREATE_ANIM(self.arrow_blocks[id1]))
+                        anims.append(self.ARROW_CREATE_ANIM(self.arrow_blocks[id2]))
                 else:
                     # This adds them to the scene.
                     anims.append(Transform(self.arrow_blocks[id1], self.arrow_blocks[id1]))
@@ -240,7 +248,7 @@ class SquareDanceAnimator(MovingCameraScene):
                 all_anims.append(AnimationGroup(*anims))
         if self.ARROW_CREATE_RUNTIME > 0 and len(all_anims) > 0:
             return overlay_objs, LaggedStart(*all_anims, lag_ratio=self.ARROW_LAG_RATIO)
-        return None, None
+        return overlay_objs, None
 
     def _create_arrow(self, pos, direction, final=False):
         # First the bg rect.
@@ -283,16 +291,6 @@ class SquareDanceAnimator(MovingCameraScene):
             new_arrow = self._create_arrow(self.arrow_blocks[id].get_center(), self.arrow_blocks[id].direction, final=True)
             anims.append(Transform(self.arrow_blocks[id], new_arrow))
         self.play(LaggedStart(*anims, lag_ratio=self.ARROW_FINAL_LAG_RATIO), run_time=self.ARROW_FINAL_RUNTIME)
-
-    def construct(self):
-        self.renderer.camera.background_color = self.background_color
-        self.renderer.camera.init_background()
-
-        from generation import AztecGenerator
-        a = AztecGenerator()
-        a.generate(n=4, seed="HD7XEC")
-        self.from_obj(a.obj)
-        self.wait(1)
 
     def reset(self):
         self.remove(*self.mobjects)
