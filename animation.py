@@ -76,23 +76,23 @@ class SquareDanceAnimator(MovingCameraScene):
     # GENERAL
     ITERATION_WAIT = 0.2
     RESIZE = True
+    RESIZE_TIME = 0.5
+    ANIMATION_STEPS = [
+        ["RESIZE", "EXPAND", "REMOVE"],
+        ["MOVE"],
+        ["CREATE"],
+    ]
 
     def from_obj(self, obj):
         self.seed_text = self.create_seed_obj(obj)
         self.add(self.seed_text)
         self.arrow_blocks = {}
         if self.RESIZE is True:
-            self.play(
-                self.camera_frame.set_height, self.scale * 3, 
-            )
+            self.camera_frame.set_height(self.scale * 3)
         for iteration_obj in obj["generation_data"]:
             self.increment_animate(iteration_obj)
             if self.ITERATION_WAIT > 0:
                 self.wait(self.ITERATION_WAIT)
-            if self.RESIZE is True:
-                self.play(
-                    self.camera_frame.set_height, self.scale * (2 * iteration_obj["iteration"] + 5),
-                )
         if self.TRANSFORM_FINAL:
             self.transform_arrows()
 
@@ -112,13 +112,38 @@ class SquareDanceAnimator(MovingCameraScene):
     def increment_animate(self, iteration_obj):
         # Generate the open squares.
         iteration = iteration_obj["iteration"]
-        self.generate_squares(iteration)
+        expand_anim = self.generate_squares(iteration)
         destroyed = iteration_obj["destroyed_blocks"]
-        self.destroy_existing(destroyed)
+        destroyed_overlay, destroyed_anim = self.destroy_existing(destroyed)
         moved = iteration_obj["moved_blocks"]
-        self.move_existing(moved)
+        moved_anim = self.move_existing(moved)
         created = iteration_obj["created_blocks"]
-        self.create_arrows(created)
+        create_overlay, created_anim = self.create_arrows(created)
+        for animation in self.ANIMATION_STEPS:
+            args = []
+            max_run_time = 0
+            if "RESIZE" in animation and self.RESIZE:
+                max_run_time = max(max_run_time, self.RESIZE_TIME)
+                args.extend([
+                    self.camera_frame.set_height, 
+                    self.scale * (2 * iteration_obj["iteration"] + 5),
+                ])
+            if "EXPAND" in animation and expand_anim:
+                max_run_time = max(max_run_time, self.SQUARE_CREATE_RUNTIME)
+                args.append(expand_anim)
+            if "REMOVE" in animation and destroyed_anim:
+                self.add_foreground_mobjects(*destroyed_overlay)
+                max_run_time = max(max_run_time, self.DESTRUCTION_RUNTIME)
+                args.append(destroyed_anim)
+            if "MOVE" in animation and moved_anim:
+                max_run_time = max(max_run_time, self.MOVEMENT_RUNTIME)
+                args.append(moved_anim)
+            if "CREATE" in animation and created_anim:
+                self.add_foreground_mobjects(*create_overlay)
+                max_run_time = max(max_run_time, self.ARROW_CREATE_RUNTIME)
+                args.append(created_anim)
+            if len(args) > 0:
+                self.play(*args, run_time=max_run_time)
 
     def generate_squares(self, iteration):
         squares = []
@@ -128,9 +153,10 @@ class SquareDanceAnimator(MovingCameraScene):
             squares.append(self._generate_open_square([(a+0.5) * self.scale, (b1+0.5) * self.scale, 0]))
             squares.append(self._generate_open_square([(a+0.5) * self.scale, (b2+0.5) * self.scale, 0]))
         if self.SQUARE_CREATE_ANIM is not None and self.SQUARE_CREATE_RUNTIME > 0:
-            self.play(LaggedStart(*(self.SQUARE_CREATE_ANIM(v, rate_func=self.SQUARE_CREATE_RATE_FUNC) for v in squares), lag_ratio=self.SQUARE_LAG_RATIO), run_time=self.SQUARE_CREATE_RUNTIME)
+            return LaggedStart(*(self.SQUARE_CREATE_ANIM(v, rate_func=self.SQUARE_CREATE_RATE_FUNC) for v in squares), lag_ratio=self.SQUARE_LAG_RATIO)
         else:
-            self.add(*squares)
+            # Instantly show.
+            return LaggedStart(*(FadeIn(v, rate_func=lambda t: 1) for v in squares), lag_ratio=self.SQUARE_LAG_RATIO)
 
     def _generate_open_square(self, position):
         sq = Square(side_length=self.scale, **self.OPEN_SQUARE_KWARGS)
@@ -139,6 +165,7 @@ class SquareDanceAnimator(MovingCameraScene):
 
     def destroy_existing(self, destroyed_blocks):
         all_anims = []
+        overlay_objs = []
         for id1, id2 in destroyed_blocks:
             # Generate a square containing both arrow blocks, and fade colour.
             if self.DESTRUCTION_RUNTIME > 0:
@@ -146,13 +173,17 @@ class SquareDanceAnimator(MovingCameraScene):
                 if self.DESTRUCTION_ARROW_ANIM is not None:
                     anims.append(self.DESTRUCTION_ARROW_ANIM(self.arrow_blocks[id1]))
                     anims.append(self.DESTRUCTION_ARROW_ANIM(self.arrow_blocks[id2]))
+                else:
+                    # Instantly remove on animate.
+                    anims.append(FadeOut(self.arrow_blocks[id1], rate_func=lambda t: 1))
+                    anims.append(FadeOut(self.arrow_blocks[id2], rate_func=lambda t: 1))
                 if self.DESTRUCTION_OVERLAY_COLOUR is not None:
                     top = max(self.arrow_blocks[id1].get_top()[1], self.arrow_blocks[id2].get_top()[1])
                     right = max(self.arrow_blocks[id1].get_right()[0], self.arrow_blocks[id2].get_right()[0])
                     fade_square = Square(side_length=self.scale * 2, color=self.DESTRUCTION_OVERLAY_COLOUR)
                     fade_square.set_opacity(self.DESTRUCTION_OVERLAY_STARTING_ALPHA)
                     fade_square.move_to([right - self.scale, top - self.scale, 0])
-                    self.add(fade_square)
+                    overlay_objs.append(fade_square)
                     anims.append(FadeOut(fade_square))
                 all_anims.append(AnimationGroup(*anims))
             else:
@@ -160,7 +191,8 @@ class SquareDanceAnimator(MovingCameraScene):
             del self.arrow_blocks[id1]
             del self.arrow_blocks[id2]
         if self.DESTRUCTION_RUNTIME > 0 and len(all_anims) > 0:
-            self.play(LaggedStart(*all_anims, lag_ratio=self.DESTRUCTION_LAG_RATIO), run_time=self.DESTRUCTION_RUNTIME)
+            return overlay_objs, LaggedStart(*all_anims, lag_ratio=self.DESTRUCTION_LAG_RATIO)
+        return None, None
 
     def move_existing(self, moved_blocks):
         anims = []
@@ -173,10 +205,11 @@ class SquareDanceAnimator(MovingCameraScene):
             else:
                 self.arrow_blocks[id].move_to(new_pos)
         if self.MOVEMENT_RUNTIME > 0 and len(anims) > 0:
-            self.play(LaggedStart(*anims, lag_ratio=self.MOVEMENT_LAG_RATIO), run_time=self.MOVEMENT_RUNTIME)
+            return LaggedStart(*anims, lag_ratio=self.MOVEMENT_LAG_RATIO)
 
     def create_arrows(self, created):
         all_anims = []
+        overlay_objs = []
         for (id1, (p11, p12), (d1x, d1y)), (id2, (p21, p22), (d2x, d2y)) in created:
             self.arrow_blocks[id1] = self._create_arrow(
                 [((p11[0] + p12[0])/2 + 0.5) * self.scale, ((p11[1] + p12[1])/2 + 0.5) * self.scale, 0],
@@ -186,7 +219,7 @@ class SquareDanceAnimator(MovingCameraScene):
                 [((p21[0] + p22[0])/2 + 0.5) * self.scale, ((p21[1] + p22[1])/2 + 0.5) * self.scale, 0],
                 [d2x, d2y],
             )
-            self.add(self.arrow_blocks[id1], self.arrow_blocks[id2])
+            overlay_objs.extend([self.arrow_blocks[id1], self.arrow_blocks[id2]])
             if self.ARROW_CREATE_RUNTIME > 0:
                 anims = []
                 if self.ARROW_OVERLAY_COLOUR is not None:
@@ -195,14 +228,19 @@ class SquareDanceAnimator(MovingCameraScene):
                     fade_square = Square(side_length=self.scale * 2, color=self.ARROW_OVERLAY_COLOUR)
                     fade_square.set_opacity(self.ARROW_OVERLAY_STARTING_ALPHA)
                     fade_square.move_to([right - self.scale, top - self.scale, 0])
-                    self.add(fade_square)
+                    overlay_objs.append(fade_square)
                     anims.append(FadeOut(fade_square))
                 if self.ARROW_CREATE_ANIM is not None:
                     anims.append(self.ARROW_CREATE_ANIM(self.arrow_blocks[id1]))
                     anims.append(self.ARROW_CREATE_ANIM(self.arrow_blocks[id2]))
+                else:
+                    # This adds them to the scene.
+                    anims.append(Transform(self.arrow_blocks[id1], self.arrow_blocks[id1]))
+                    anims.append(Transform(self.arrow_blocks[id2], self.arrow_blocks[id2]))
                 all_anims.append(AnimationGroup(*anims))
         if self.ARROW_CREATE_RUNTIME > 0 and len(all_anims) > 0:
-            self.play(LaggedStart(*all_anims, lag_ratio=self.ARROW_LAG_RATIO), run_time=self.ARROW_CREATE_RUNTIME)
+            return overlay_objs, LaggedStart(*all_anims, lag_ratio=self.ARROW_LAG_RATIO)
+        return None, None
 
     def _create_arrow(self, pos, direction, final=False):
         # First the bg rect.
@@ -252,6 +290,6 @@ class SquareDanceAnimator(MovingCameraScene):
 
         from generation import AztecGenerator
         a = AztecGenerator()
-        a.generate(n=8, seed="HD7XEC")
+        a.generate(n=4, seed="HD7XEC")
         self.from_obj(a.obj)
         self.wait(1)
