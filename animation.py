@@ -115,7 +115,7 @@ class SquareDanceAnimator(Scene):
                 all_anims.append(AnimationGroup(*anims))
             else:
                 self.remove(self.arrow_blocks[id1], self.arrow_blocks[id2])
-        if self.DESTRUCTION_RUNTIME > 0:
+        if self.DESTRUCTION_RUNTIME > 0 and len(all_anims) > 0:
             self.play(LaggedStart(*all_anims, lag_ratio=self.DESTRUCTION_LAG_RATIO), run_time=self.DESTRUCTION_RUNTIME)
 
     def move_existing(self, moved_blocks):
@@ -128,7 +128,7 @@ class SquareDanceAnimator(Scene):
                 anims.append(ApplyMethod(self.arrow_blocks[id].move_to, new_pos, rate_func=self.MOVEMENT_RATE_FUNC))
             else:
                 self.arrow_blocks[id].move_to(new_pos)
-        if self.MOVEMENT_RUNTIME > 0:
+        if self.MOVEMENT_RUNTIME > 0 and len(anims) > 0:
             self.play(LaggedStart(*anims, lag_ratio=self.MOVEMENT_LAG_RATIO), run_time=self.MOVEMENT_RUNTIME)
 
     def create_arrows(self, created):
@@ -157,7 +157,7 @@ class SquareDanceAnimator(Scene):
                     anims.append(self.ARROW_CREATE_ANIM(self.arrow_blocks[id1]))
                     anims.append(self.ARROW_CREATE_ANIM(self.arrow_blocks[id2]))
                 all_anims.append(AnimationGroup(*anims))
-        if self.ARROW_CREATE_RUNTIME > 0:
+        if self.ARROW_CREATE_RUNTIME > 0 and len(all_anims) > 0:
             self.play(LaggedStart(*all_anims, lag_ratio=self.ARROW_LAG_RATIO), run_time=self.ARROW_CREATE_RUNTIME)
 
     def _create_arrow(self, pos, direction):
