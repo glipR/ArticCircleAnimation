@@ -293,3 +293,8 @@ class SquareDanceAnimator(MovingCameraScene):
         a.generate(n=4, seed="HD7XEC")
         self.from_obj(a.obj)
         self.wait(1)
+
+    def reset(self):
+        self.remove(*self.mobjects)
+        self.remove_foreground_mobjects(*self.foreground_mobjects)
+        self.arrow_blocks = {}
