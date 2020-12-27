@@ -54,12 +54,17 @@ class SquareDanceAnimator(Scene):
     DESTRUCTION_LAG_RATIO = 0.1
     DESTRUCTION_RUNTIME = 1
 
+    # GENERAL
+    ITERATION_WAIT = 0.2
+
     def from_obj(self, obj):
         self.seed_text = self.create_seed_obj(obj)
         self.add(self.seed_text)
         self.arrow_blocks = {}
         for iteration_obj in obj["generation_data"]:
             self.increment_animate(iteration_obj)
+            if self.ITERATION_WAIT > 0:
+                self.wait(self.ITERATION_WAIT)
 
     def create_seed_obj(self, obj):
         seed = obj["general_info"]["seed"]
