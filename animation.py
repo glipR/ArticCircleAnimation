@@ -2,10 +2,10 @@ import math
 from manim import Scene, Tex
 from manim.animation.composition import AnimationGroup, LaggedStart
 from manim.animation.fading import FadeIn, FadeOut
-from manim.animation.transform import ApplyMethod
+from manim.animation.transform import ApplyMethod, Transform
 from manim.constants import PI, RIGHT, UP
 from manim.mobject.geometry import Arrow, Rectangle, Square
-from manim.utils.color import BLACK, BLUE, GREEN, RED, WHITE
+from manim.utils.color import BLACK, BLUE, GREEN, RED, WHITE, YELLOW
 from manim.utils.rate_functions import smooth
 
 class SquareDanceAnimator(Scene):
@@ -36,6 +36,22 @@ class SquareDanceAnimator(Scene):
     })
     ARROW_DIR_COLOR = BLUE
 
+    TRANSFORM_FINAL = True
+    ARROW_FINAL_BG_KWARGS = (lambda self, dx, dy: {
+        "color": BLACK,
+        "fill_color": (
+            RED if dx > 0 else (
+                YELLOW if dx < 0 else (
+                    BLUE if dy > 0 else (
+                        GREEN
+                    )
+                )
+            )
+        ),
+        "fill_opacity": 1,
+    })
+    ARROW_FINAL_DIR_COLOR = None
+
     ARROW_CREATE_ANIM = None
     ARROW_LAG_RATIO = 0.1
     ARROW_CREATE_RUNTIME = 1
@@ -65,6 +81,8 @@ class SquareDanceAnimator(Scene):
             self.increment_animate(iteration_obj)
             if self.ITERATION_WAIT > 0:
                 self.wait(self.ITERATION_WAIT)
+        if self.TRANSFORM_FINAL:
+            self.transform_arrows()
 
     def create_seed_obj(self, obj):
         seed = obj["general_info"]["seed"]
@@ -120,6 +138,8 @@ class SquareDanceAnimator(Scene):
                 all_anims.append(AnimationGroup(*anims))
             else:
                 self.remove(self.arrow_blocks[id1], self.arrow_blocks[id2])
+            del self.arrow_blocks[id1]
+            del self.arrow_blocks[id2]
         if self.DESTRUCTION_RUNTIME > 0 and len(all_anims) > 0:
             self.play(LaggedStart(*all_anims, lag_ratio=self.DESTRUCTION_LAG_RATIO), run_time=self.DESTRUCTION_RUNTIME)
 
@@ -165,16 +185,26 @@ class SquareDanceAnimator(Scene):
         if self.ARROW_CREATE_RUNTIME > 0 and len(all_anims) > 0:
             self.play(LaggedStart(*all_anims, lag_ratio=self.ARROW_LAG_RATIO), run_time=self.ARROW_CREATE_RUNTIME)
 
-    def _create_arrow(self, pos, direction):
+    def _create_arrow(self, pos, direction, final=False):
         # First the bg rect.
         if direction[0] == 0:
             width, height = 2, 1
         else:
             width, height = 1, 2
-        rect = Rectangle(width=width*self.scale, height=height*self.scale, **self.ARROW_BG_KWARGS(*direction))
+        rect = Rectangle(
+            width=width*self.scale, 
+            height=height*self.scale, 
+            **(
+                self.ARROW_FINAL_BG_KWARGS(*direction)
+                if final else
+                self.ARROW_BG_KWARGS(*direction)
+            )
+        )
         rect.move_to(pos)
-        if self.ARROW_DIR_COLOR is not None:
-            arrow = Arrow(color=self.ARROW_DIR_COLOR)
+        rect.direction = direction
+        col = self.ARROW_FINAL_DIR_COLOR if final else self.ARROW_DIR_COLOR
+        if col is not None:
+            arrow = Arrow(color=col)
             arrow.scale(self.scale * 0.5)
             if direction[0] == 1 and direction[1] == 0:
                 pass
@@ -189,6 +219,13 @@ class SquareDanceAnimator(Scene):
             arrow.move_to(pos)
             rect.add(arrow)
         return rect
+
+    def transform_arrows(self):
+        anims = []
+        for id in self.arrow_blocks:
+            new_arrow = self._create_arrow(self.arrow_blocks[id].get_center(), self.arrow_blocks[id].direction, final=True)
+            anims.append(Transform(self.arrow_blocks[id], new_arrow))
+        self.play(LaggedStart(*anims))
 
     def construct(self):
         self.renderer.camera.background_color = self.background_color
