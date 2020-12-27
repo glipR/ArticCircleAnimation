@@ -119,9 +119,10 @@ class AztecGenerator:
                             "neighbour": [0, -1],
                             "id": self.current_id,
                         }
+                        self.current_id += 1
                         created.append([
-                            [self.current_id - 1, [[a - len(self.area)//2, b - len(self.area)//2], [a - len(self.area)//2, b - len(self.area)//2+1]], (-1, 0)],
-                            [self.current_id, [[a - len(self.area)//2+1, b - len(self.area)//2], [a - len(self.area)//2+1, b - len(self.area)//2+1]], (1, 0)],
+                            [self.current_id - 2, [[a - len(self.area)//2, b - len(self.area)//2], [a - len(self.area)//2, b - len(self.area)//2+1]], (-1, 0)],
+                            [self.current_id - 1, [[a - len(self.area)//2+1, b - len(self.area)//2], [a - len(self.area)//2+1, b - len(self.area)//2+1]], (1, 0)],
                         ])
                     else:
                         # Left/Right. Remember x is down, y is right.
@@ -146,9 +147,10 @@ class AztecGenerator:
                             "neighbour": [0, -1],
                             "id": self.current_id,
                         }
+                        self.current_id += 1
                         created.append([
-                            [self.current_id - 1, [[a - len(self.area)//2, b - len(self.area)//2], [a - len(self.area)//2+1, b - len(self.area)//2]], (0, -1)],
-                            [self.current_id, [[a - len(self.area)//2, b - len(self.area)//2+1], [a - len(self.area)//2+1, b - len(self.area)//2+1]], (0, 1)],
+                            [self.current_id - 2, [[a - len(self.area)//2, b - len(self.area)//2], [a - len(self.area)//2+1, b - len(self.area)//2]], (0, -1)],
+                            [self.current_id - 1, [[a - len(self.area)//2, b - len(self.area)//2+1], [a - len(self.area)//2+1, b - len(self.area)//2+1]], (0, 1)],
                         ])
         return removed, moved, created
 
