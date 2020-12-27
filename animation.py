@@ -1,14 +1,15 @@
 import math
-from manim import Scene, Tex
+from manim import Tex
 from manim.animation.composition import AnimationGroup, LaggedStart
 from manim.animation.fading import FadeIn, FadeOut
 from manim.animation.transform import ApplyMethod, Transform
-from manim.constants import PI, RIGHT, UP
+from manim.constants import DEFAULT_MOBJECT_TO_MOBJECT_BUFFER, DOWN, LEFT, PI, RIGHT, UP
 from manim.mobject.geometry import Arrow, Rectangle, Square
+from manim.scene.moving_camera_scene import MovingCameraScene
 from manim.utils.color import BLACK, BLUE, GREEN, RED, WHITE, YELLOW
 from manim.utils.rate_functions import smooth
 
-class SquareDanceAnimator(Scene):
+class SquareDanceAnimator(MovingCameraScene):
 
     CONFIG = {
         "background_color": "#feeafa",
@@ -74,22 +75,38 @@ class SquareDanceAnimator(Scene):
 
     # GENERAL
     ITERATION_WAIT = 0.2
+    RESIZE = True
 
     def from_obj(self, obj):
         self.seed_text = self.create_seed_obj(obj)
         self.add(self.seed_text)
         self.arrow_blocks = {}
+        if self.RESIZE is True:
+            self.play(
+                self.camera_frame.set_height, self.scale * 3, 
+            )
         for iteration_obj in obj["generation_data"]:
             self.increment_animate(iteration_obj)
             if self.ITERATION_WAIT > 0:
                 self.wait(self.ITERATION_WAIT)
+            if self.RESIZE is True:
+                self.play(
+                    self.camera_frame.set_height, self.scale * (2 * iteration_obj["iteration"] + 5),
+                )
         if self.TRANSFORM_FINAL:
             self.transform_arrows()
 
     def create_seed_obj(self, obj):
         seed = obj["general_info"]["seed"]
         seed_text = Tex(seed, color=self.TEXT_COLOR)
-        seed_text.to_corner(UP + RIGHT)
+        def update(t):
+            seed_text.set_width(self.camera_frame.get_width() * 0.2)
+            seed_text.next_to([self.camera_frame.get_width() / 2, self.camera_frame.get_height() / 2, 0], direction=LEFT + DOWN, buff=0)
+            seed_text.shift(
+                LEFT * self.camera_frame.get_width() * 0.05 +
+                DOWN * self.camera_frame.get_height() * 0.05
+            )
+        seed_text.add_updater(update)
         return seed_text
 
     def increment_animate(self, iteration_obj):
@@ -235,6 +252,6 @@ class SquareDanceAnimator(Scene):
 
         from generation import AztecGenerator
         a = AztecGenerator()
-        a.generate(n=5, seed="HD7XEC")
+        a.generate(n=8, seed="HD7XEC")
         self.from_obj(a.obj)
         self.wait(1)
